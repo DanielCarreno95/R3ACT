@@ -139,10 +139,66 @@ def load_data():
     """Load R3ACT results"""
     if st.session_state.results_df is None:
         with st.spinner("Loading data and calculating R3ACT metrics (this may take several minutes)..."):
+            # Mostrar progreso en la sidebar
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
+            status_text.text("Initializing R3ACT system...")
             r3act = R3ACTSystem(time_window='medium')
-            results_df = r3act.process_all_matches(load_tracking=True)
-            st.session_state.results_df = results_df
-            st.session_state.league_averages = calculate_league_averages(results_df)
+            
+            status_text.text("Processing matches (checking logs for details)...")
+            progress_bar.progress(20)
+            
+            # Capturar output para mostrar en logs
+            import sys
+            from io import StringIO
+            
+            # Crear un buffer para capturar prints
+            old_stdout = sys.stdout
+            sys.stdout = buffer = StringIO()
+            
+            try:
+                results_df = r3act.process_all_matches(load_tracking=True)
+                
+                # Restaurar stdout y mostrar logs
+                sys.stdout = old_stdout
+                output = buffer.getvalue()
+                
+                # Mostrar logs en expander
+                with st.expander("View Processing Logs", expanded=False):
+                    st.text(output)
+                
+                progress_bar.progress(80)
+                status_text.text("Calculating league averages...")
+                
+                st.session_state.results_df = results_df
+                st.session_state.league_averages = calculate_league_averages(results_df)
+                
+                progress_bar.progress(100)
+                status_text.text("Complete!")
+                
+                # Mostrar estadísticas
+                if not results_df.empty:
+                    st.success(f"✅ Loaded {len(results_df)} critical events")
+                    
+                    # Verificar métricas
+                    crt_count = results_df['CRT'].notna().sum() if 'CRT' in results_df.columns else 0
+                    tsi_count = results_df['TSI'].notna().sum() if 'TSI' in results_df.columns else 0
+                    giri_count = results_df['GIRI'].notna().sum() if 'GIRI' in results_df.columns else 0
+                    
+                    if crt_count == 0 and tsi_count == 0:
+                        st.warning("⚠️ No metrics calculated. Check logs above for tracking data loading issues.")
+                    else:
+                        st.info(f"📊 Metrics: CRT={crt_count}, TSI={tsi_count}, GIRI={giri_count}")
+            except Exception as e:
+                sys.stdout = old_stdout
+                output = buffer.getvalue()
+                st.error(f"❌ Error processing data: {e}")
+                with st.expander("View Error Logs", expanded=True):
+                    st.text(output)
+                    st.exception(e)
+                raise
+    
     return st.session_state.results_df, st.session_state.league_averages
 
 def create_kpi_card(title, value, subtitle="", color=COLORS['primary_text']):

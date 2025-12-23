@@ -95,42 +95,72 @@ class SkillCornerDataLoader:
         
         url = f"{self.BASE_URL}/matches/{match_id}/{match_id}_tracking_extrapolated.jsonl"
         try:
+            print(f"      Intentando cargar: {url}")
             response = requests.get(url, stream=True, timeout=120)
+            print(f"      Status code: {response.status_code}")
+            
+            if response.status_code == 404:
+                print(f"      ✗ ERROR 404: Archivo no encontrado")
+                print(f"      Verificando si el partido existe...")
+                # Verificar si match.json existe
+                match_url = f"{self.BASE_URL}/matches/{match_id}/{match_id}_match.json"
+                match_response = requests.get(match_url, timeout=30)
+                if match_response.status_code == 200:
+                    print(f"      ✓ match.json existe, pero tracking_extrapolated.jsonl no")
+                    print(f"      Posible causa: El archivo tracking no existe para este partido")
+                else:
+                    print(f"      ✗ match.json tampoco existe (status: {match_response.status_code})")
+                return []
+            
             response.raise_for_status()
             
             frames = []
             line_count = 0
+            empty_lines = 0
+            
+            print(f"      Leyendo líneas del archivo...")
             for i, line in enumerate(response.iter_lines(decode_unicode=True)):
                 line_count += 1
-                if line:
-                    try:
-                        # Decodificar si es bytes
-                        if isinstance(line, bytes):
-                            line = line.decode('utf-8')
-                        frame_data = json.loads(line)
-                        frames.append(frame_data)
-                        if max_frames and len(frames) >= max_frames:
-                            break
-                    except json.JSONDecodeError as e:
-                        if i < 10:  # Solo mostrar primeros errores
-                            print(f"      Línea {i} inválida: {e}")
-                        continue  # Saltar líneas inválidas
+                if not line or line.strip() == '':
+                    empty_lines += 1
+                    continue
+                    
+                try:
+                    # Decodificar si es bytes
+                    if isinstance(line, bytes):
+                        line = line.decode('utf-8')
+                    frame_data = json.loads(line)
+                    frames.append(frame_data)
+                    
+                    if len(frames) == 1:
+                        print(f"      ✓ Primer frame cargado. Keys: {list(frame_data.keys())[:5]}")
+                    
+                    if max_frames and len(frames) >= max_frames:
+                        break
+                except json.JSONDecodeError as e:
+                    if i < 5:  # Solo mostrar primeros errores
+                        print(f"      ✗ Línea {i} JSON inválido: {str(e)[:50]}")
+                        print(f"         Contenido: {line[:100]}")
+                    continue  # Saltar líneas inválidas
+            
+            print(f"      Resumen: {line_count} líneas leídas, {empty_lines} vacías, {len(frames)} frames válidos")
             
             if max_frames is None:
                 self.cache[cache_key] = frames
             
-            if len(frames) == 0 and line_count > 0:
-                print(f"      ADVERTENCIA: Se leyeron {line_count} líneas pero 0 frames válidos")
+            if len(frames) == 0:
+                if line_count == 0:
+                    print(f"      ✗ PROBLEMA: Archivo vacío o no se pudo leer")
+                else:
+                    print(f"      ✗ PROBLEMA: Se leyeron {line_count} líneas pero 0 frames válidos")
+                    print(f"      Posibles causas: Formato incorrecto, codificación, o archivo corrupto")
             
             return frames
-        except requests.exceptions.HTTPError as e:
-            if e.response.status_code == 404:
-                print(f"      ADVERTENCIA: Archivo no encontrado en {url}")
-                return []
-            else:
-                raise Exception(f"Error HTTP cargando tracking data para {match_id}: {e}")
+        except requests.exceptions.RequestException as e:
+            print(f"      ✗ ERROR de conexión: {e}")
+            return []
         except Exception as e:
-            print(f"      ERROR cargando tracking: {e}")
+            print(f"      ✗ ERROR inesperado: {e}")
             import traceback
             traceback.print_exc()
             return []  # Retornar lista vacía en lugar de lanzar excepción
