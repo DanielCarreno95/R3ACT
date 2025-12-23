@@ -15,6 +15,7 @@ class SkillCornerDataLoader:
     """Cargador de datos de SkillCorner desde GitHub"""
     
     BASE_URL = "https://raw.githubusercontent.com/SkillCorner/opendata/master/data"
+    GITHUB_API_URL = "https://api.github.com/repos/SkillCorner/opendata/contents/data"
     
     def __init__(self):
         self.matches_info = None
@@ -55,16 +56,15 @@ class SkillCornerDataLoader:
         """Carga eventos dinámicos de un partido"""
         cache_key = f"events_{match_id}"
         if cache_key in self.cache:
-            return self.cache[cache_key].copy()
+            return self.cache[cache_key]
         
         url = f"{self.BASE_URL}/matches/{match_id}/{match_id}_dynamic_events.csv"
         try:
-            response = requests.get(url, timeout=60)
+            response = requests.get(url, timeout=30)
             response.raise_for_status()
-            # Usar low_memory=False para evitar warnings de tipos mixtos
-            df = pd.read_csv(io.StringIO(response.text), low_memory=False)
+            df = pd.read_csv(io.StringIO(response.text))
             self.cache[cache_key] = df
-            return df.copy()
+            return df
         except Exception as e:
             raise Exception(f"Error cargando dynamic_events.csv para {match_id}: {e}")
     
@@ -72,98 +72,96 @@ class SkillCornerDataLoader:
         """Carga fases de juego de un partido"""
         cache_key = f"phases_{match_id}"
         if cache_key in self.cache:
-            return self.cache[cache_key].copy()
+            return self.cache[cache_key]
         
         url = f"{self.BASE_URL}/matches/{match_id}/{match_id}_phases_of_play.csv"
         try:
-            response = requests.get(url, timeout=60)
+            response = requests.get(url, timeout=30)
             response.raise_for_status()
             df = pd.read_csv(io.StringIO(response.text))
             self.cache[cache_key] = df
-            return df.copy()
+            return df
         except Exception as e:
             raise Exception(f"Error cargando phases_of_play.csv para {match_id}: {e}")
+    
+    def _is_git_lfs_pointer(self, content: str) -> bool:
+        """Verifica si el contenido es un puntero de Git LFS"""
+        return content.startswith('version https://git-lfs.github.com/spec/v1')
+    
+    def _download_from_lfs(self, match_id: str) -> List[Dict]:
+        """
+        Intenta descargar desde Git LFS usando la API de GitHub
+        NOTA: Los archivos de tracking están en Git LFS y son muy grandes (89MB+)
+        Para Streamlit Cloud, esto puede no ser viable. Retornamos lista vacía.
+        """
+        print(f"      ⚠️ Archivo está en Git LFS (muy grande para descargar)")
+        print(f"      Los archivos de tracking son demasiado grandes para cargar desde Streamlit Cloud")
+        print(f"      SOLUCIÓN: Trabajar sin tracking data o usar datos pre-procesados")
+        return []
     
     def load_tracking_data(self, match_id: str, max_frames: Optional[int] = None) -> List[Dict]:
         """
         Carga datos de tracking de un partido
-        Por defecto carga todos los frames, pero puede limitarse con max_frames
+        NOTA: Los archivos de tracking están en Git LFS y son muy grandes.
+        Para esta implementación, retornamos lista vacía y trabajamos sin tracking.
         """
         cache_key = f"tracking_{match_id}"
         if cache_key in self.cache and max_frames is None:
             return self.cache[cache_key]
         
         url = f"{self.BASE_URL}/matches/{match_id}/{match_id}_tracking_extrapolated.jsonl"
+        print(f"      Intentando cargar tracking: {match_id}")
+        
         try:
-            print(f"      Intentando cargar: {url}")
-            response = requests.get(url, stream=True, timeout=120)
+            response = requests.get(url, stream=True, timeout=30)
             print(f"      Status code: {response.status_code}")
             
-            if response.status_code == 404:
-                print(f"      ✗ ERROR 404: Archivo no encontrado")
-                print(f"      Verificando si el partido existe...")
-                # Verificar si match.json existe
-                match_url = f"{self.BASE_URL}/matches/{match_id}/{match_id}_match.json"
-                match_response = requests.get(match_url, timeout=30)
-                if match_response.status_code == 200:
-                    print(f"      ✓ match.json existe, pero tracking_extrapolated.jsonl no")
-                    print(f"      Posible causa: El archivo tracking no existe para este partido")
-                else:
-                    print(f"      ✗ match.json tampoco existe (status: {match_response.status_code})")
+            if response.status_code != 200:
+                print(f"      ✗ No se puede cargar (status {response.status_code})")
                 return []
             
-            response.raise_for_status()
+            # Leer primeras líneas para verificar si es LFS
+            first_lines = []
+            for i, line in enumerate(response.iter_lines(decode_unicode=True)):
+                if i < 3:
+                    first_lines.append(line)
+                else:
+                    break
             
+            # Verificar si es puntero de Git LFS
+            if first_lines and self._is_git_lfs_pointer(first_lines[0]):
+                return self._download_from_lfs(match_id)
+            
+            # Si no es LFS, intentar cargar normalmente
+            response = requests.get(url, stream=True, timeout=120)
             frames = []
             line_count = 0
-            empty_lines = 0
             
-            print(f"      Leyendo líneas del archivo...")
             for i, line in enumerate(response.iter_lines(decode_unicode=True)):
                 line_count += 1
                 if not line or line.strip() == '':
-                    empty_lines += 1
                     continue
                     
                 try:
-                    # Decodificar si es bytes
                     if isinstance(line, bytes):
                         line = line.decode('utf-8')
                     frame_data = json.loads(line)
                     frames.append(frame_data)
                     
-                    if len(frames) == 1:
-                        print(f"      ✓ Primer frame cargado. Keys: {list(frame_data.keys())[:5]}")
-                    
                     if max_frames and len(frames) >= max_frames:
                         break
-                except json.JSONDecodeError as e:
-                    if i < 5:  # Solo mostrar primeros errores
-                        print(f"      ✗ Línea {i} JSON inválido: {str(e)[:50]}")
-                        print(f"         Contenido: {line[:100]}")
-                    continue  # Saltar líneas inválidas
-            
-            print(f"      Resumen: {line_count} líneas leídas, {empty_lines} vacías, {len(frames)} frames válidos")
+                except json.JSONDecodeError:
+                    continue
             
             if max_frames is None:
                 self.cache[cache_key] = frames
             
-            if len(frames) == 0:
-                if line_count == 0:
-                    print(f"      ✗ PROBLEMA: Archivo vacío o no se pudo leer")
-                else:
-                    print(f"      ✗ PROBLEMA: Se leyeron {line_count} líneas pero 0 frames válidos")
-                    print(f"      Posibles causas: Formato incorrecto, codificación, o archivo corrupto")
-            
+            print(f"      Cargados {len(frames)} frames")
             return frames
-        except requests.exceptions.RequestException as e:
-            print(f"      ✗ ERROR de conexión: {e}")
-            return []
+            
         except Exception as e:
-            print(f"      ✗ ERROR inesperado: {e}")
-            import traceback
-            traceback.print_exc()
-            return []  # Retornar lista vacía en lugar de lanzar excepción
+            print(f"      ✗ Error: {e}")
+            return []
     
     def get_match_ids(self) -> List[str]:
         """Obtiene lista de IDs de todos los partidos disponibles"""
@@ -192,4 +190,3 @@ class SkillCornerDataLoader:
                 continue
         
         return all_data
-

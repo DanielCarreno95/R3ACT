@@ -199,6 +199,10 @@ class R3ACTSystem:
             event_result['TSI'] = None
             event_result['GIRI'] = None
             
+            # NOTA: Los archivos de tracking están en Git LFS y son muy grandes (89MB+)
+            # Para Streamlit Cloud, no es viable descargarlos. Trabajamos sin tracking.
+            # Las métricas CRT, TSI, GIRI requieren tracking data, por lo que no se pueden calcular.
+            
             # Calcular CRT (si hay tracking y player_id)
             if tracking_frames and len(tracking_frames) > 0 and event.get('player_id') and self.metrics_calculator:
                 try:
