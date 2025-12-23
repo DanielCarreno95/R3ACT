@@ -138,9 +138,9 @@ def calculate_league_averages(df):
 def load_data():
     """Load R3ACT results"""
     if st.session_state.results_df is None:
-        with st.spinner("Loading data and calculating R3ACT metrics..."):
+        with st.spinner("Loading data and calculating R3ACT metrics (this may take several minutes)..."):
             r3act = R3ACTSystem(time_window='medium')
-            results_df = r3act.process_all_matches(load_tracking=False)
+            results_df = r3act.process_all_matches(load_tracking=True)
             st.session_state.results_df = results_df
             st.session_state.league_averages = calculate_league_averages(results_df)
     return st.session_state.results_df, st.session_state.league_averages
@@ -221,49 +221,76 @@ def main():
     
     # KPI Cards
     st.markdown("## Key Performance Indicators")
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3, col4, col5 = st.columns(5)
     
     with col1:
         total_events = len(filtered_df)
+        league_total = league_avg.get('total_events', 0)
         st.markdown(create_kpi_card(
             "Total Critical Events",
             f"{total_events:,}",
-            f"League Avg: {league_avg.get('total_events', 0):,}",
+            f"League Avg: {league_total:,}" if league_total > 0 else "Total events detected",
             COLORS['primary_text']
         ), unsafe_allow_html=True)
     
     with col2:
         if 'CRT' in filtered_df.columns:
-            crt_mean = filtered_df['CRT'].mean()
-            league_crt = league_avg.get('crt_mean', 0)
-            st.markdown(create_kpi_card(
-                "Average CRT",
-                f"{crt_mean:.1f}s" if pd.notna(crt_mean) else "N/A",
-                f"League Avg: {league_crt:.1f}s" if league_crt > 0 else "",
-                COLORS['accent_blue']
-            ), unsafe_allow_html=True)
+            crt_values = filtered_df['CRT'].dropna()
+            if len(crt_values) > 0:
+                crt_mean = crt_values.mean()
+                league_crt = league_avg.get('crt_mean', 0)
+                st.markdown(create_kpi_card(
+                    "Cognitive Reset Time",
+                    f"{crt_mean:.1f}s",
+                    f"League Avg: {league_crt:.1f}s" if league_crt > 0 else "Individual recovery time",
+                    COLORS['accent_blue']
+                ), unsafe_allow_html=True)
+            else:
+                st.markdown(create_kpi_card("Cognitive Reset Time", "N/A", "No data available", COLORS['neutral']), unsafe_allow_html=True)
         else:
-            st.markdown(create_kpi_card("Average CRT", "N/A", "", COLORS['neutral']), unsafe_allow_html=True)
+            st.markdown(create_kpi_card("Cognitive Reset Time", "N/A", "Column not found", COLORS['neutral']), unsafe_allow_html=True)
     
     with col3:
         if 'TSI' in filtered_df.columns:
-            tsi_mean = filtered_df['TSI'].mean()
-            league_tsi = league_avg.get('tsi_mean', 0)
-            st.markdown(create_kpi_card(
-                "Average TSI",
-                f"{tsi_mean:.3f}" if pd.notna(tsi_mean) else "N/A",
-                f"League Avg: {league_tsi:.3f}" if league_tsi != 0 else "",
-                COLORS['accent_cyan']
-            ), unsafe_allow_html=True)
+            tsi_values = filtered_df['TSI'].dropna()
+            if len(tsi_values) > 0:
+                tsi_mean = tsi_values.mean()
+                league_tsi = league_avg.get('tsi_mean', 0)
+                st.markdown(create_kpi_card(
+                    "Team Support Index",
+                    f"{tsi_mean:.3f}",
+                    f"League Avg: {league_tsi:.3f}" if league_tsi != 0 else "Collective team response",
+                    COLORS['accent_cyan']
+                ), unsafe_allow_html=True)
+            else:
+                st.markdown(create_kpi_card("Team Support Index", "N/A", "No data available", COLORS['neutral']), unsafe_allow_html=True)
         else:
-            st.markdown(create_kpi_card("Average TSI", "N/A", "", COLORS['neutral']), unsafe_allow_html=True)
+            st.markdown(create_kpi_card("Team Support Index", "N/A", "Column not found", COLORS['neutral']), unsafe_allow_html=True)
     
     with col4:
+        if 'GIRI' in filtered_df.columns:
+            giri_values = filtered_df['GIRI'].dropna()
+            if len(giri_values) > 0:
+                giri_mean = giri_values.mean()
+                league_giri = league_avg.get('giri_mean', 0)
+                st.markdown(create_kpi_card(
+                    "Goal Impact Response Index",
+                    f"{giri_mean:.3f}",
+                    f"League Avg: {league_giri:.3f}" if league_giri != 0 else "Tactical change post-goal",
+                    COLORS['accent_blue']
+                ), unsafe_allow_html=True)
+            else:
+                st.markdown(create_kpi_card("Goal Impact Response Index", "N/A", "No goal events", COLORS['neutral']), unsafe_allow_html=True)
+        else:
+            st.markdown(create_kpi_card("Goal Impact Response Index", "N/A", "Column not found", COLORS['neutral']), unsafe_allow_html=True)
+    
+    with col5:
         events_per_min = total_events / 90 if total_events > 0 else 0
+        league_epm = league_avg.get('events_per_match', 0) / 90 if league_avg.get('events_per_match', 0) > 0 else 0
         st.markdown(create_kpi_card(
             "Events per Minute",
             f"{events_per_min:.2f}",
-            "Critical events frequency",
+            f"League Avg: {league_epm:.2f}" if league_epm > 0 else "Critical events frequency",
             COLORS['success']
         ), unsafe_allow_html=True)
     
@@ -339,8 +366,8 @@ def main():
                 paper_bgcolor=COLORS['background'],
                 font=dict(color=COLORS['primary_text']),
                 height=400,
-                xaxis=dict(title="Number of Events", titlefont=dict(color=COLORS['secondary_text'])),
-                yaxis=dict(title="", titlefont=dict(color=COLORS['secondary_text']))
+                xaxis=dict(title="Number of Events", title_font=dict(color=COLORS['secondary_text'])),
+                yaxis=dict(title="", title_font=dict(color=COLORS['secondary_text']))
             )
             st.plotly_chart(fig, use_container_width=True)
             st.caption("Distribution of critical events by type. Higher values indicate more frequent critical situations.")
@@ -370,8 +397,8 @@ def main():
                 paper_bgcolor=COLORS['background'],
                 font=dict(color=COLORS['primary_text']),
                 height=400,
-                xaxis=dict(title="Match Minute", titlefont=dict(color=COLORS['secondary_text'])),
-                yaxis=dict(title="Event Type", titlefont=dict(color=COLORS['secondary_text']))
+                xaxis=dict(title="Match Minute", title_font=dict(color=COLORS['secondary_text'])),
+                yaxis=dict(title="Event Type", title_font=dict(color=COLORS['secondary_text']))
             )
             st.plotly_chart(fig, use_container_width=True)
             st.caption("Temporal distribution of critical events throughout the match. Identify critical moments.")
@@ -411,8 +438,8 @@ def main():
                     paper_bgcolor=COLORS['background'],
                     font=dict(color=COLORS['primary_text']),
                     height=400,
-                    xaxis=dict(title="CRT (seconds)", titlefont=dict(color=COLORS['secondary_text'])),
-                    yaxis=dict(title="Frequency", titlefont=dict(color=COLORS['secondary_text']))
+                    xaxis=dict(title="CRT (seconds)", title_font=dict(color=COLORS['secondary_text'])),
+                    yaxis=dict(title="Frequency", title_font=dict(color=COLORS['secondary_text']))
                 )
                 st.plotly_chart(fig, use_container_width=True)
                 st.caption(f"CRT measures individual recovery time. Lower values indicate better resilience. League average: {league_crt:.1f}s" if league_crt > 0 else "CRT measures individual recovery time. Lower values indicate better resilience.")
@@ -439,8 +466,8 @@ def main():
                     paper_bgcolor=COLORS['background'],
                     font=dict(color=COLORS['primary_text']),
                     height=400,
-                    xaxis=dict(title="Average CRT (seconds)", titlefont=dict(color=COLORS['secondary_text'])),
-                    yaxis=dict(title="", titlefont=dict(color=COLORS['secondary_text']))
+                    xaxis=dict(title="Average CRT (seconds)", title_font=dict(color=COLORS['secondary_text'])),
+                    yaxis=dict(title="", title_font=dict(color=COLORS['secondary_text']))
                 )
                 st.plotly_chart(fig, use_container_width=True)
                 st.caption("Average recovery time by event type. Higher values indicate events that cause longer recovery periods.")
@@ -484,8 +511,8 @@ def main():
                     paper_bgcolor=COLORS['background'],
                     font=dict(color=COLORS['primary_text']),
                     height=400,
-                    xaxis=dict(title="TSI", titlefont=dict(color=COLORS['secondary_text'])),
-                    yaxis=dict(title="Frequency", titlefont=dict(color=COLORS['secondary_text']))
+                    xaxis=dict(title="TSI", title_font=dict(color=COLORS['secondary_text'])),
+                    yaxis=dict(title="Frequency", title_font=dict(color=COLORS['secondary_text']))
                 )
                 st.plotly_chart(fig, use_container_width=True)
                 st.caption(f"TSI measures collective team response. Positive values indicate support, negative values suggest isolation. League average: {league_tsi:.3f}" if league_tsi != 0 else "TSI measures collective team response. Positive values indicate support, negative values suggest isolation.")
@@ -512,8 +539,8 @@ def main():
                     paper_bgcolor=COLORS['background'],
                     font=dict(color=COLORS['primary_text']),
                     height=400,
-                    xaxis=dict(title="Average TSI", titlefont=dict(color=COLORS['secondary_text'])),
-                    yaxis=dict(title="", titlefont=dict(color=COLORS['secondary_text']))
+                    xaxis=dict(title="Average TSI", title_font=dict(color=COLORS['secondary_text'])),
+                    yaxis=dict(title="", title_font=dict(color=COLORS['secondary_text']))
                 )
                 st.plotly_chart(fig, use_container_width=True)
                 st.caption("Average team support by event type. Higher values indicate better collective response to specific error types.")
@@ -555,8 +582,8 @@ def main():
                     paper_bgcolor=COLORS['background'],
                     font=dict(color=COLORS['primary_text']),
                     height=400,
-                    xaxis=dict(title="GIRI", titlefont=dict(color=COLORS['secondary_text'])),
-                    yaxis=dict(title="Frequency", titlefont=dict(color=COLORS['secondary_text']))
+                    xaxis=dict(title="GIRI", title_font=dict(color=COLORS['secondary_text'])),
+                    yaxis=dict(title="Frequency", title_font=dict(color=COLORS['secondary_text']))
                 )
                 st.plotly_chart(fig, use_container_width=True)
                 st.caption(f"GIRI measures tactical changes post-goal. Positive values indicate proactive response, negative values suggest disorganization. League average: {league_giri:.3f}" if league_giri != 0 else "GIRI measures tactical changes post-goal. Positive values indicate proactive response, negative values suggest disorganization.")
@@ -585,8 +612,8 @@ def main():
                         paper_bgcolor=COLORS['background'],
                         font=dict(color=COLORS['primary_text']),
                         height=400,
-                        xaxis=dict(title="Goal Type", titlefont=dict(color=COLORS['secondary_text'])),
-                        yaxis=dict(title="Average GIRI", titlefont=dict(color=COLORS['secondary_text']))
+                        xaxis=dict(title="Goal Type", title_font=dict(color=COLORS['secondary_text'])),
+                        yaxis=dict(title="Average GIRI", title_font=dict(color=COLORS['secondary_text']))
                     )
                     st.plotly_chart(fig, use_container_width=True)
                     st.caption("Comparison of tactical response after scoring vs conceding. Analyze if team responds differently to different goal situations.")
