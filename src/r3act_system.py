@@ -69,9 +69,14 @@ class R3ACTSystem:
                 try:
                     tracking_frames = self.data_loader.load_tracking_data(match_id)
                     tracking_data_dict[match_id] = tracking_frames
-                    print(f"  Partido {match_id}: {len(tracking_frames)} frames")
+                    if len(tracking_frames) == 0:
+                        print(f"  ADVERTENCIA: Partido {match_id}: 0 frames cargados - verificar URL o formato")
+                    else:
+                        print(f"  Partido {match_id}: {len(tracking_frames)} frames")
                 except Exception as e:
-                    print(f"  Advertencia: Error cargando tracking para {match_id}: {e}")
+                    print(f"  ERROR: Error cargando tracking para {match_id}: {e}")
+                    import traceback
+                    traceback.print_exc()
                     tracking_data_dict[match_id] = []
         else:
             print("\n[2/5] Omitiendo carga de tracking (load_tracking=False)")
@@ -116,9 +121,18 @@ class R3ACTSystem:
         # 6. Crear DataFrame final y enriquecer con nombres
         print("\n[5/5] Generando dataset final...")
         if all_results:
+            # Asegurar que TODOS los resultados tengan las columnas de métricas
+            for result in all_results:
+                if 'CRT' not in result:
+                    result['CRT'] = None
+                if 'TSI' not in result:
+                    result['TSI'] = None
+                if 'GIRI' not in result:
+                    result['GIRI'] = None
+            
             results_df = pd.DataFrame(all_results)
             
-            # Asegurar que las columnas de métricas siempre existan
+            # Verificar que las columnas existen después de crear el DataFrame
             if 'CRT' not in results_df.columns:
                 results_df['CRT'] = None
             if 'TSI' not in results_df.columns:
@@ -180,13 +194,13 @@ class R3ACTSystem:
                 'time_window': self.selected_window,
             }
             
-            # Inicializar métricas como None por defecto
+            # Inicializar métricas como None por defecto (SIEMPRE)
             event_result['CRT'] = None
             event_result['TSI'] = None
             event_result['GIRI'] = None
             
             # Calcular CRT (si hay tracking y player_id)
-            if tracking_frames and event.get('player_id') and self.metrics_calculator:
+            if tracking_frames and len(tracking_frames) > 0 and event.get('player_id') and self.metrics_calculator:
                 try:
                     crt = self.metrics_calculator.calculate_crt(
                         int(event.get('player_id')),
@@ -210,7 +224,7 @@ class R3ACTSystem:
                     print(f"    MetricsCalculator no inicializado")
             
             # Calcular TSI (si hay tracking y phases)
-            if tracking_frames and not phases_df.empty and self.metrics_calculator:
+            if tracking_frames and len(tracking_frames) > 0 and not phases_df.empty and self.metrics_calculator:
                 try:
                     tsi = self.metrics_calculator.calculate_tsi(
                         int(event.get('player_id', 0)),
@@ -230,7 +244,7 @@ class R3ACTSystem:
             
             # Calcular GIRI (solo para goles)
             if event.get('event_type') in ['goal_scored', 'goal_conceded']:
-                if tracking_frames and not phases_df.empty and self.metrics_calculator:
+                if tracking_frames and len(tracking_frames) > 0 and not phases_df.empty and self.metrics_calculator:
                     try:
                         giri = self.metrics_calculator.calculate_giri(
                             int(event.get('team_id', 0)),

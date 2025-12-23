@@ -99,21 +99,41 @@ class SkillCornerDataLoader:
             response.raise_for_status()
             
             frames = []
-            for i, line in enumerate(response.iter_lines()):
+            line_count = 0
+            for i, line in enumerate(response.iter_lines(decode_unicode=True)):
+                line_count += 1
                 if line:
                     try:
+                        # Decodificar si es bytes
+                        if isinstance(line, bytes):
+                            line = line.decode('utf-8')
                         frame_data = json.loads(line)
                         frames.append(frame_data)
                         if max_frames and len(frames) >= max_frames:
                             break
-                    except json.JSONDecodeError:
+                    except json.JSONDecodeError as e:
+                        if i < 10:  # Solo mostrar primeros errores
+                            print(f"      Línea {i} inválida: {e}")
                         continue  # Saltar líneas inválidas
             
             if max_frames is None:
                 self.cache[cache_key] = frames
+            
+            if len(frames) == 0 and line_count > 0:
+                print(f"      ADVERTENCIA: Se leyeron {line_count} líneas pero 0 frames válidos")
+            
             return frames
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 404:
+                print(f"      ADVERTENCIA: Archivo no encontrado en {url}")
+                return []
+            else:
+                raise Exception(f"Error HTTP cargando tracking data para {match_id}: {e}")
         except Exception as e:
-            raise Exception(f"Error cargando tracking data para {match_id}: {e}")
+            print(f"      ERROR cargando tracking: {e}")
+            import traceback
+            traceback.print_exc()
+            return []  # Retornar lista vacía en lugar de lanzar excepción
     
     def get_match_ids(self) -> List[str]:
         """Obtiene lista de IDs de todos los partidos disponibles"""

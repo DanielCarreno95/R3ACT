@@ -422,7 +422,7 @@ def main():
                 xaxis=dict(title="Number of Events", title_font=dict(color=COLORS['secondary_text'])),
                 yaxis=dict(title="", title_font=dict(color=COLORS['secondary_text']))
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
             st.caption("Distribution of critical events by type. Higher values indicate more frequent critical situations.")
         else:
             st.info("No data available for selected filters.")
@@ -453,7 +453,7 @@ def main():
                 xaxis=dict(title="Match Minute", title_font=dict(color=COLORS['secondary_text'])),
                 yaxis=dict(title="Event Type", title_font=dict(color=COLORS['secondary_text']))
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
             st.caption("Temporal distribution of critical events throughout the match. Identify critical moments.")
         else:
             st.info("No timeline data available.")
@@ -494,7 +494,7 @@ def main():
                     xaxis=dict(title="CRT (seconds)", title_font=dict(color=COLORS['secondary_text'])),
                     yaxis=dict(title="Frequency", title_font=dict(color=COLORS['secondary_text']))
                 )
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width='stretch')
                 st.caption(f"CRT measures individual recovery time. Lower values indicate better resilience. League average: {league_crt:.1f}s" if league_crt > 0 else "CRT measures individual recovery time. Lower values indicate better resilience.")
             else:
                 st.info("No CRT data available for selected filters.")
@@ -522,7 +522,7 @@ def main():
                     xaxis=dict(title="Average CRT (seconds)", title_font=dict(color=COLORS['secondary_text'])),
                     yaxis=dict(title="", title_font=dict(color=COLORS['secondary_text']))
                 )
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width='stretch')
                 st.caption("Average recovery time by event type. Higher values indicate events that cause longer recovery periods.")
             else:
                 st.info("No CRT data available.")
@@ -567,7 +567,7 @@ def main():
                     xaxis=dict(title="TSI", title_font=dict(color=COLORS['secondary_text'])),
                     yaxis=dict(title="Frequency", title_font=dict(color=COLORS['secondary_text']))
                 )
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width='stretch')
                 st.caption(f"TSI measures collective team response. Positive values indicate support, negative values suggest isolation. League average: {league_tsi:.3f}" if league_tsi != 0 else "TSI measures collective team response. Positive values indicate support, negative values suggest isolation.")
             else:
                 st.info("No TSI data available for selected filters.")
@@ -595,7 +595,7 @@ def main():
                     xaxis=dict(title="Average TSI", title_font=dict(color=COLORS['secondary_text'])),
                     yaxis=dict(title="", title_font=dict(color=COLORS['secondary_text']))
                 )
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width='stretch')
                 st.caption("Average team support by event type. Higher values indicate better collective response to specific error types.")
             else:
                 st.info("No TSI data available.")
@@ -638,7 +638,7 @@ def main():
                     xaxis=dict(title="GIRI", title_font=dict(color=COLORS['secondary_text'])),
                     yaxis=dict(title="Frequency", title_font=dict(color=COLORS['secondary_text']))
                 )
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width='stretch')
                 st.caption(f"GIRI measures tactical changes post-goal. Positive values indicate proactive response, negative values suggest disorganization. League average: {league_giri:.3f}" if league_giri != 0 else "GIRI measures tactical changes post-goal. Positive values indicate proactive response, negative values suggest disorganization.")
             else:
                 st.info("No GIRI data available for selected filters.")
@@ -668,7 +668,7 @@ def main():
                         xaxis=dict(title="Goal Type", title_font=dict(color=COLORS['secondary_text'])),
                         yaxis=dict(title="Average GIRI", title_font=dict(color=COLORS['secondary_text']))
                     )
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig, width='stretch')
                     st.caption("Comparison of tactical response after scoring vs conceding. Analyze if team responds differently to different goal situations.")
                 else:
                     st.info("No goal events available for GIRI analysis.")
@@ -691,20 +691,26 @@ def main():
     if 'player_name' in filtered_df.columns:
         base_columns.append('player_name')
     
-    # Agregar métricas si existen
+    # Agregar métricas si existen (verificar ANTES de agregar)
     metric_columns = ['CRT', 'TSI', 'GIRI']
     for col in base_columns + metric_columns:
         if col in filtered_df.columns:
             available_columns.append(col)
     
     if available_columns:
-        st.dataframe(
-            filtered_df[available_columns].head(100),
-            use_container_width=True,
-            height=400
-        )
+        try:
+            st.dataframe(
+                filtered_df[available_columns].head(100),
+                width='stretch',
+                height=400
+            )
+        except KeyError as e:
+            st.error(f"Error mostrando tabla: {e}")
+            st.write("Columnas disponibles:", list(filtered_df.columns))
+            st.dataframe(filtered_df.head(100), width='stretch', height=400)
     else:
         st.info("No columns available to display.")
+        st.write("Columnas en DataFrame:", list(filtered_df.columns))
     
     # Download button
     csv = filtered_df.to_csv(index=False)
