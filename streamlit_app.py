@@ -164,9 +164,10 @@ def load_data():
                 sys.stdout = old_stdout
                 output = buffer.getvalue()
                 
-                # Mostrar logs en expander
-                with st.expander("View Processing Logs", expanded=False):
-                    st.text(output)
+                # Mostrar logs en expander (siempre visible si hay output)
+                if output.strip():
+                    with st.expander("📋 View Processing Logs", expanded=True):
+                        st.text(output)
                 
                 progress_bar.progress(80)
                 status_text.text("Calculating league averages...")
@@ -194,10 +195,15 @@ def load_data():
                 sys.stdout = old_stdout
                 output = buffer.getvalue()
                 st.error(f"❌ Error processing data: {e}")
-                with st.expander("View Error Logs", expanded=True):
-                    st.text(output)
+                with st.expander("📋 View Error Logs", expanded=True):
+                    if output.strip():
+                        st.text(output)
                     st.exception(e)
                 raise
+            finally:
+                # Asegurar que stdout se restaure
+                if 'old_stdout' in locals():
+                    sys.stdout = old_stdout
     
     return st.session_state.results_df, st.session_state.league_averages
 
@@ -212,12 +218,55 @@ def create_kpi_card(title, value, subtitle="", color=COLORS['primary_text']):
     """
 
 def main():
+    # Botón para limpiar cache y recargar
+    if st.session_state.results_df is not None:
+        col1, col2 = st.columns([3, 1])
+        with col2:
+            if st.button("🔄 Reload Data (Clear Cache)", type="secondary"):
+                st.session_state.results_df = None
+                st.session_state.league_averages = {}
+                st.rerun()
+    
     # Load data
     results_df, league_avg = load_data()
     
     if results_df is None or results_df.empty:
         st.error("No data available. Please run the R3ACT system first.")
         return
+    
+    # Mostrar información de diagnóstico si no hay métricas
+    if 'CRT' in results_df.columns:
+        crt_count = results_df['CRT'].notna().sum()
+        tsi_count = results_df['TSI'].notna().sum() if 'TSI' in results_df.columns else 0
+        giri_count = results_df['GIRI'].notna().sum() if 'GIRI' in results_df.columns else 0
+        
+        if crt_count == 0 and tsi_count == 0:
+            st.warning("⚠️ **No metrics calculated (CRT=0, TSI=0)**. This indicates tracking data was not loaded. Click 'Reload Data' to see detailed logs.")
+            with st.expander("🔍 Diagnostic Information", expanded=True):
+                st.markdown("""
+                **Problem:** Tracking data is not being loaded (0 frames for all matches).
+                
+                **Possible causes:**
+                1. The tracking files don't exist in the SkillCorner repository
+                2. The URL format is incorrect
+                3. Network/access issues from Streamlit Cloud
+                
+                **To diagnose:**
+                1. Click "🔄 Reload Data" button above
+                2. Check the "View Processing Logs" expander that will appear
+                3. Look for messages like:
+                   - "✗ ERROR 404: Archivo no encontrado" → File doesn't exist
+                   - "Status code: 200" but "0 frames" → Format/parsing issue
+                   - "Se leyeron X líneas pero 0 frames válidos" → JSON parsing problem
+                """)
+                
+                # Mostrar estadísticas del DataFrame
+                st.markdown("**Current Data Status:**")
+                st.write(f"- Total events: {len(results_df)}")
+                st.write(f"- Columns: {list(results_df.columns)}")
+                st.write(f"- CRT values: {crt_count}/{len(results_df)}")
+                st.write(f"- TSI values: {tsi_count}/{len(results_df)}")
+                st.write(f"- GIRI values: {giri_count}/{len(results_df)}")
     
     # Title and Subtitle
     st.markdown("<h1 style='text-align: center; color: #00FF88;'>R3ACT Dashboard</h1>", unsafe_allow_html=True)
