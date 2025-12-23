@@ -78,18 +78,23 @@ class R3ACTSystem:
         
         # 3. Calcular estado base sobre todos los partidos
         print("\n[3/5] Calculando estado base...")
-        baselines = self.baseline_calculator.calculate_baselines(
-            all_matches_data, tracking_data_dict
-        )
-        
-        # Calcular baselines de velocidad
-        if load_tracking:
+        if load_tracking and tracking_data_dict:
+            baselines = self.baseline_calculator.calculate_baselines(
+                all_matches_data, tracking_data_dict
+            )
+            
+            # Calcular baselines de velocidad
             self.baseline_calculator.calculate_velocity_baselines(
                 all_matches_data, tracking_data_dict
             )
+            
+            print(f"Baselines calculados: {len(self.baseline_calculator.player_baselines)} jugadores, {len(self.baseline_calculator.team_baselines)} equipos")
+        else:
+            print("Advertencia: No hay tracking data para calcular baselines")
         
         # 4. Inicializar calculador de métricas
         self.metrics_calculator = MetricsCalculator(self.baseline_calculator)
+        print("MetricsCalculator inicializado")
         
         # 5. Procesar cada partido
         print(f"\n[4/5] Procesando partidos (ventana: {self.selected_window}, {self.time_window_seconds}s)...")
@@ -120,6 +125,13 @@ class R3ACTSystem:
                 results_df['TSI'] = None
             if 'GIRI' not in results_df.columns:
                 results_df['GIRI'] = None
+            
+            # Estadísticas de métricas calculadas
+            crt_count = results_df['CRT'].notna().sum() if 'CRT' in results_df.columns else 0
+            tsi_count = results_df['TSI'].notna().sum() if 'TSI' in results_df.columns else 0
+            giri_count = results_df['GIRI'].notna().sum() if 'GIRI' in results_df.columns else 0
+            
+            print(f"  Métricas calculadas: CRT={crt_count}/{len(results_df)}, TSI={tsi_count}/{len(results_df)}, GIRI={giri_count}/{len(results_df)}")
             
             # Enriquecer con nombres de partidos, equipos y jugadores
             print("Enriqueciendo datos con nombres...")
@@ -184,8 +196,18 @@ class R3ACTSystem:
                         self.time_window_seconds
                     )
                     event_result['CRT'] = crt
+                    if crt is None:
+                        print(f"    CRT no calculado para evento {event.get('event_id')} - player {event.get('player_id')}")
                 except Exception as e:
+                    print(f"    Error calculando CRT para evento {event.get('event_id')}: {e}")
                     event_result['CRT'] = None
+            else:
+                if not tracking_frames:
+                    print(f"    Sin tracking para evento {event.get('event_id')}")
+                elif not event.get('player_id'):
+                    print(f"    Sin player_id para evento {event.get('event_id')}")
+                elif not self.metrics_calculator:
+                    print(f"    MetricsCalculator no inicializado")
             
             # Calcular TSI (si hay tracking y phases)
             if tracking_frames and not phases_df.empty and self.metrics_calculator:
@@ -200,7 +222,10 @@ class R3ACTSystem:
                         self.time_window_seconds
                     )
                     event_result['TSI'] = tsi
+                    if tsi is None:
+                        print(f"    TSI no calculado para evento {event.get('event_id')}")
                 except Exception as e:
+                    print(f"    Error calculando TSI para evento {event.get('event_id')}: {e}")
                     event_result['TSI'] = None
             
             # Calcular GIRI (solo para goles)
@@ -215,7 +240,10 @@ class R3ACTSystem:
                             self.time_window_seconds
                         )
                         event_result['GIRI'] = giri
+                        if giri is None:
+                            print(f"    GIRI no calculado para evento {event.get('event_id')}")
                     except Exception as e:
+                        print(f"    Error calculando GIRI para evento {event.get('event_id')}: {e}")
                         event_result['GIRI'] = None
             
             results.append(event_result)

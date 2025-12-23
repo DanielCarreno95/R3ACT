@@ -20,6 +20,7 @@ class MetricsCalculator:
             baseline_calculator: Instancia de BaselineCalculator
         """
         self.baseline = baseline_calculator
+        self.baseline = baseline_calculator
     
     def calculate_crt(self, player_id: int, error_timestamp: float, 
                      error_frame: int, tracking_frames: List[Dict],
