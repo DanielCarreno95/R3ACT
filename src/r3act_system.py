@@ -108,10 +108,23 @@ class R3ACTSystem:
                 print(f"  Error procesando partido {match_id}: {e}")
                 continue
         
-        # 6. Crear DataFrame final
+        # 6. Crear DataFrame final y enriquecer con nombres
         print("\n[5/5] Generando dataset final...")
         if all_results:
             results_df = pd.DataFrame(all_results)
+            
+            # Asegurar que las columnas de métricas siempre existan
+            if 'CRT' not in results_df.columns:
+                results_df['CRT'] = None
+            if 'TSI' not in results_df.columns:
+                results_df['TSI'] = None
+            if 'GIRI' not in results_df.columns:
+                results_df['GIRI'] = None
+            
+            # Enriquecer con nombres de partidos, equipos y jugadores
+            print("Enriqueciendo datos con nombres...")
+            results_df = self._enrich_with_names(results_df, all_matches_data)
+            
             self.results = results_df
             print(f"Dataset generado: {len(results_df)} eventos críticos analizados")
             return results_df
@@ -155,8 +168,13 @@ class R3ACTSystem:
                 'time_window': self.selected_window,
             }
             
+            # Inicializar métricas como None por defecto
+            event_result['CRT'] = None
+            event_result['TSI'] = None
+            event_result['GIRI'] = None
+            
             # Calcular CRT (si hay tracking y player_id)
-            if tracking_frames and event.get('player_id'):
+            if tracking_frames and event.get('player_id') and self.metrics_calculator:
                 try:
                     crt = self.metrics_calculator.calculate_crt(
                         int(event.get('player_id')),
@@ -170,7 +188,7 @@ class R3ACTSystem:
                     event_result['CRT'] = None
             
             # Calcular TSI (si hay tracking y phases)
-            if tracking_frames and not phases_df.empty:
+            if tracking_frames and not phases_df.empty and self.metrics_calculator:
                 try:
                     tsi = self.metrics_calculator.calculate_tsi(
                         int(event.get('player_id', 0)),
@@ -187,7 +205,7 @@ class R3ACTSystem:
             
             # Calcular GIRI (solo para goles)
             if event.get('event_type') in ['goal_scored', 'goal_conceded']:
-                if tracking_frames and not phases_df.empty:
+                if tracking_frames and not phases_df.empty and self.metrics_calculator:
                     try:
                         giri = self.metrics_calculator.calculate_giri(
                             int(event.get('team_id', 0)),
@@ -199,12 +217,62 @@ class R3ACTSystem:
                         event_result['GIRI'] = giri
                     except Exception as e:
                         event_result['GIRI'] = None
-            else:
-                event_result['GIRI'] = None
             
             results.append(event_result)
         
         return results
+    
+    def _enrich_with_names(self, results_df: pd.DataFrame, all_matches_data: Dict) -> pd.DataFrame:
+        """Enriquece el DataFrame con nombres de partidos, equipos y jugadores"""
+        if results_df.empty:
+            return results_df
+        
+        # Crear diccionarios de mapeo
+        match_names = {}
+        team_names = {}
+        player_names = {}
+        
+        # Procesar cada partido para extraer nombres
+        for match_id, match_data in all_matches_data.items():
+            match_json = match_data.get('match_json', {})
+            
+            # Nombre del partido
+            home_team = match_json.get('home_team', {})
+            away_team = match_json.get('away_team', {})
+            home_name = home_team.get('name', f"Team {home_team.get('id', 'Unknown')}")
+            away_name = away_team.get('name', f"Team {away_team.get('id', 'Unknown')}")
+            match_names[str(match_id)] = f"{home_name} vs {away_name}"
+            
+            # Nombres de equipos
+            home_team_id = home_team.get('id')
+            away_team_id = away_team.get('id')
+            if home_team_id:
+                team_names[home_team_id] = home_name
+            if away_team_id:
+                team_names[away_team_id] = away_name
+            
+            # Nombres de jugadores (desde lineups)
+            lineups = match_json.get('lineups', [])
+            for lineup in lineups:
+                players = lineup.get('players', [])
+                for player in players:
+                    player_id = player.get('player_id')
+                    player_name = player.get('player_name', f"Player {player_id}")
+                    if player_id:
+                        player_names[player_id] = player_name
+        
+        # Agregar columnas de nombres
+        results_df['match_name'] = results_df['match_id'].astype(str).map(match_names).fillna(results_df['match_id'])
+        results_df['team_name'] = results_df['team_id'].map(team_names).fillna(results_df['team_id'].astype(str))
+        
+        # Si player_name ya existe, usarlo; si no, mapear desde player_id
+        if 'player_name' not in results_df.columns:
+            results_df['player_name'] = None
+        results_df['player_name'] = results_df['player_name'].fillna(
+            results_df['player_id'].map(player_names).fillna(results_df['player_id'].astype(str))
+        )
+        
+        return results_df
     
     def get_results_summary(self) -> Dict:
         """Obtiene resumen estadístico de los resultados"""

@@ -172,28 +172,76 @@ def main():
     with st.sidebar:
         st.markdown("## Filters")
         
-        # Match filter
-        match_ids = ['All'] + sorted(results_df['match_id'].unique().tolist())
-        selected_match = st.selectbox("Match", match_ids)
+        # Match filter - mostrar nombres si están disponibles
+        if 'match_name' in results_df.columns:
+            match_options = ['All'] + sorted(results_df['match_name'].unique().tolist())
+            selected_match_display = st.selectbox("Match", match_options)
+            if selected_match_display == 'All':
+                selected_match = 'All'
+            else:
+                selected_match = results_df[results_df['match_name'] == selected_match_display]['match_id'].iloc[0]
+        else:
+            match_ids = ['All'] + sorted(results_df['match_id'].unique().tolist())
+            selected_match_display = st.selectbox("Match", match_ids)
+            selected_match = selected_match_display
         
-        # Team filter
+        # Team filter - mostrar nombres si están disponibles
         if selected_match != 'All':
             match_data = results_df[results_df['match_id'] == selected_match]
-            teams = ['All'] + sorted(match_data['team_id'].unique().tolist())
+            if 'team_name' in match_data.columns:
+                team_options = ['All'] + sorted(match_data['team_name'].unique().tolist())
+                selected_team_display = st.selectbox("Team", team_options)
+                if selected_team_display == 'All':
+                    selected_team = 'All'
+                else:
+                    selected_team = match_data[match_data['team_name'] == selected_team_display]['team_id'].iloc[0]
+            else:
+                teams = ['All'] + sorted(match_data['team_id'].unique().tolist())
+                selected_team_display = st.selectbox("Team", teams)
+                selected_team = selected_team_display
         else:
-            teams = ['All'] + sorted(results_df['team_id'].unique().tolist())
-        selected_team = st.selectbox("Team", teams)
+            if 'team_name' in results_df.columns:
+                team_options = ['All'] + sorted(results_df['team_name'].unique().tolist())
+                selected_team_display = st.selectbox("Team", team_options)
+                if selected_team_display == 'All':
+                    selected_team = 'All'
+                else:
+                    selected_team = results_df[results_df['team_name'] == selected_team_display]['team_id'].iloc[0]
+            else:
+                teams = ['All'] + sorted(results_df['team_id'].unique().tolist())
+                selected_team_display = st.selectbox("Team", teams)
+                selected_team = selected_team_display
         
-        # Player filter
+        # Player filter - mostrar nombres si están disponibles
         if selected_team != 'All':
             if selected_match != 'All':
                 player_data = match_data[match_data['team_id'] == selected_team]
             else:
                 player_data = results_df[results_df['team_id'] == selected_team]
-            players = ['All'] + sorted([p for p in player_data['player_id'].dropna().unique().tolist() if pd.notna(p)])
+            
+            if 'player_name' in player_data.columns:
+                player_options = ['All'] + sorted([p for p in player_data['player_name'].dropna().unique().tolist() if pd.notna(p)])
+                selected_player_display = st.selectbox("Player", player_options)
+                if selected_player_display == 'All':
+                    selected_player = 'All'
+                else:
+                    selected_player = player_data[player_data['player_name'] == selected_player_display]['player_id'].iloc[0]
+            else:
+                players = ['All'] + sorted([p for p in player_data['player_id'].dropna().unique().tolist() if pd.notna(p)])
+                selected_player_display = st.selectbox("Player", players)
+                selected_player = selected_player_display
         else:
-            players = ['All'] + sorted([p for p in results_df['player_id'].dropna().unique().tolist() if pd.notna(p)])
-        selected_player = st.selectbox("Player", players)
+            if 'player_name' in results_df.columns:
+                player_options = ['All'] + sorted([p for p in results_df['player_name'].dropna().unique().tolist() if pd.notna(p)])
+                selected_player_display = st.selectbox("Player", player_options)
+                if selected_player_display == 'All':
+                    selected_player = 'All'
+                else:
+                    selected_player = results_df[results_df['player_name'] == selected_player_display]['player_id'].iloc[0]
+            else:
+                players = ['All'] + sorted([p for p in results_df['player_id'].dropna().unique().tolist() if pd.notna(p)])
+                selected_player_display = st.selectbox("Player", players)
+                selected_player = selected_player_display
         
         # Period filter
         periods = ['All', 'First Half', 'Second Half']
@@ -246,9 +294,9 @@ def main():
                     COLORS['accent_blue']
                 ), unsafe_allow_html=True)
             else:
-                st.markdown(create_kpi_card("Cognitive Reset Time", "N/A", "No data available", COLORS['neutral']), unsafe_allow_html=True)
+                st.markdown(create_kpi_card("Cognitive Reset Time", "N/A", "No CRT data calculated", COLORS['neutral']), unsafe_allow_html=True)
         else:
-            st.markdown(create_kpi_card("Cognitive Reset Time", "N/A", "Column not found", COLORS['neutral']), unsafe_allow_html=True)
+            st.markdown(create_kpi_card("Cognitive Reset Time", "N/A", "Metric not available", COLORS['neutral']), unsafe_allow_html=True)
     
     with col3:
         if 'TSI' in filtered_df.columns:
@@ -263,9 +311,9 @@ def main():
                     COLORS['accent_cyan']
                 ), unsafe_allow_html=True)
             else:
-                st.markdown(create_kpi_card("Team Support Index", "N/A", "No data available", COLORS['neutral']), unsafe_allow_html=True)
+                st.markdown(create_kpi_card("Team Support Index", "N/A", "No TSI data calculated", COLORS['neutral']), unsafe_allow_html=True)
         else:
-            st.markdown(create_kpi_card("Team Support Index", "N/A", "Column not found", COLORS['neutral']), unsafe_allow_html=True)
+            st.markdown(create_kpi_card("Team Support Index", "N/A", "Metric not available", COLORS['neutral']), unsafe_allow_html=True)
     
     with col4:
         if 'GIRI' in filtered_df.columns:
@@ -280,9 +328,14 @@ def main():
                     COLORS['accent_blue']
                 ), unsafe_allow_html=True)
             else:
-                st.markdown(create_kpi_card("Goal Impact Response Index", "N/A", "No goal events", COLORS['neutral']), unsafe_allow_html=True)
+                # Verificar si hay eventos de gol sin GIRI calculado
+                goal_events = filtered_df[filtered_df['event_type'].isin(['goal_scored', 'goal_conceded'])]
+                if len(goal_events) > 0:
+                    st.markdown(create_kpi_card("Goal Impact Response Index", "N/A", f"{len(goal_events)} goal events, no GIRI data", COLORS['neutral']), unsafe_allow_html=True)
+                else:
+                    st.markdown(create_kpi_card("Goal Impact Response Index", "N/A", "No goal events in selection", COLORS['neutral']), unsafe_allow_html=True)
         else:
-            st.markdown(create_kpi_card("Goal Impact Response Index", "N/A", "Column not found", COLORS['neutral']), unsafe_allow_html=True)
+            st.markdown(create_kpi_card("Goal Impact Response Index", "N/A", "Metric not available", COLORS['neutral']), unsafe_allow_html=True)
     
     with col5:
         events_per_min = total_events / 90 if total_events > 0 else 0
@@ -622,14 +675,36 @@ def main():
             else:
                 st.info("No GIRI data available.")
     
-    # Data table
+    # Data table - solo mostrar columnas que existen
     st.markdown("---")
     st.markdown("## Detailed Data Table")
-    st.dataframe(
-        filtered_df[['match_id', 'event_type', 'timestamp', 'player_id', 'team_id', 'CRT', 'TSI', 'GIRI']].head(100),
-        use_container_width=True,
-        height=400
-    )
+    
+    # Seleccionar columnas disponibles
+    available_columns = []
+    base_columns = ['match_id', 'event_type', 'timestamp', 'player_id', 'team_id']
+    
+    # Agregar columnas de nombres si existen
+    if 'match_name' in filtered_df.columns:
+        base_columns.append('match_name')
+    if 'team_name' in filtered_df.columns:
+        base_columns.append('team_name')
+    if 'player_name' in filtered_df.columns:
+        base_columns.append('player_name')
+    
+    # Agregar métricas si existen
+    metric_columns = ['CRT', 'TSI', 'GIRI']
+    for col in base_columns + metric_columns:
+        if col in filtered_df.columns:
+            available_columns.append(col)
+    
+    if available_columns:
+        st.dataframe(
+            filtered_df[available_columns].head(100),
+            use_container_width=True,
+            height=400
+        )
+    else:
+        st.info("No columns available to display.")
     
     # Download button
     csv = filtered_df.to_csv(index=False)
