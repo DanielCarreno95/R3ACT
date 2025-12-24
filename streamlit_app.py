@@ -11,6 +11,8 @@ import plotly.express as px
 from plotly.subplots import make_subplots
 import sys
 import os
+import requests
+import io
 
 # Add src to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
