@@ -135,10 +135,50 @@ def calculate_league_averages(df):
     
     return averages
 
+def load_preprocessed_data():
+    """Intenta cargar datos pre-procesados desde CSV"""
+    csv_file = "r3act_metrics_preprocessed.csv"
+    
+    # Intentar cargar desde el repositorio
+    try:
+        import requests
+        url = f"https://raw.githubusercontent.com/DanielCarreno95/R3ACT/main/{csv_file}"
+        response = requests.get(url, timeout=30)
+        if response.status_code == 200:
+            import io
+            df = pd.read_csv(io.StringIO(response.text))
+            return df, True
+    except:
+        pass
+    
+    # Intentar cargar desde archivo local
+    if os.path.exists(csv_file):
+        df = pd.read_csv(csv_file)
+        return df, True
+    
+    return None, False
+
 def load_data():
-    """Load R3ACT results"""
+    """Load R3ACT results - primero intenta datos pre-procesados, luego calcula"""
     if st.session_state.results_df is None:
-        with st.spinner("Loading data and calculating R3ACT metrics (this may take several minutes)..."):
+        # Intentar cargar datos pre-procesados primero
+        preprocessed_df, loaded = load_preprocessed_data()
+        
+        if loaded and preprocessed_df is not None and not preprocessed_df.empty:
+            st.session_state.results_df = preprocessed_df
+            st.session_state.league_averages = calculate_league_averages(preprocessed_df)
+            
+            # Verificar métricas
+            crt_count = preprocessed_df['CRT'].notna().sum() if 'CRT' in preprocessed_df.columns else 0
+            tsi_count = preprocessed_df['TSI'].notna().sum() if 'TSI' in preprocessed_df.columns else 0
+            giri_count = preprocessed_df['GIRI'].notna().sum() if 'GIRI' in preprocessed_df.columns else 0
+            
+            if crt_count > 0 or tsi_count > 0:
+                st.success(f"✅ Loaded {len(preprocessed_df)} pre-processed events with metrics (CRT={crt_count}, TSI={tsi_count}, GIRI={giri_count})")
+                return st.session_state.results_df, st.session_state.league_averages
+        
+        # Si no hay datos pre-procesados, intentar calcular (solo funcionará localmente)
+        with st.spinner("No pre-processed data found. Attempting to calculate (requires Git LFS locally)..."):
             # Mostrar progreso en la sidebar
             progress_bar = st.progress(0)
             status_text = st.empty()

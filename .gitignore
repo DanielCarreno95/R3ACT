@@ -3,6 +3,10 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Pre-processed data (comentar si quieres subirlo)
+# r3act_metrics_preprocessed.csv
+# r3act_metrics_summary.json
+
 # C extensions
 *.so
 
