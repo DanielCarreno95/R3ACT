@@ -59,6 +59,7 @@ venv.bak/
 
 # Data files (loaded from GitHub, not stored locally)
 *.csv
+!r3act_metrics_preprocessed.csv
 *.json
 *.jsonl
 !requirements.txt
